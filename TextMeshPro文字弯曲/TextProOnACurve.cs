@@ -106,8 +106,7 @@ namespace ntw.CurvedTextMeshPro
                 //我们将使用它作为表示此字符的几何变换点
                 Vector3 charMidBaselinePos = new Vector2((vertices[vertexIndex + 0].x + vertices[vertexIndex + 2].x) / 2, textInfo.characterInfo[i].baseLine);
 
-                //从顶点位置中移除中心点。在此操作之后，四个顶点中的每一个
-                //将只具有相对于中心位置的偏移坐标。这在处理旋转时会很有用
+                //从顶点位置中移除中心点。在此操作之后，四个顶点中的每一个将只具有相对于中心位置的偏移坐标。这在处理旋转时会很有用
                 vertices[vertexIndex + 0] += -charMidBaselinePos;
                 vertices[vertexIndex + 1] += -charMidBaselinePos;
                 vertices[vertexIndex + 2] += -charMidBaselinePos;
@@ -122,11 +121,21 @@ namespace ntw.CurvedTextMeshPro
                 //使文本能够跟随曲线
                 matrix = ComputeTransformationMatrix(charMidBaselinePos, 0, textInfo, i);
 
-                //应用变换，并获得表示此字符的4个顶点的最终位置和方向
-                vertices[vertexIndex + 0] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 0]);
-                vertices[vertexIndex + 1] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 1]);
-                vertices[vertexIndex + 2] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 2]);
-                vertices[vertexIndex + 3] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 3]);
+                if (matrix != Matrix4x4.zero)
+                {
+                    //应用变换，并获得表示此字符的4个顶点的最终位置和方向
+                    vertices[vertexIndex + 0] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 0]);
+                    vertices[vertexIndex + 1] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 1]);
+                    vertices[vertexIndex + 2] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 2]);
+                    vertices[vertexIndex + 3] = matrix.MultiplyPoint3x4(vertices[vertexIndex + 3]);
+                }
+                else
+                {
+                    vertices[vertexIndex + 0] += charMidBaselinePos;
+                    vertices[vertexIndex + 1] += charMidBaselinePos;
+                    vertices[vertexIndex + 2] += charMidBaselinePos;
+                    vertices[vertexIndex + 3] += charMidBaselinePos;
+                }
             }
 
             //使用修订后的信息上传网格

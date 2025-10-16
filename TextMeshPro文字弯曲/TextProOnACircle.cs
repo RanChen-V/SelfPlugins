@@ -15,7 +15,9 @@
 
 using UnityEngine;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using TMPro;
+using Unity.Collections;
 
 namespace ntw.CurvedTextMeshPro
 {
@@ -53,7 +55,6 @@ namespace ntw.CurvedTextMeshPro
         /// 这对于创建优雅地展开直到达到完整弧的文本很有用，
         /// 当字符串较短时不会使字母过于稀疏
         /// </summary>
-        [SerializeField]
         [Tooltip("字母之间的最大角度距离，以度为单位")]
         private int m_maxDegreesPerLetter = 360;
 
@@ -106,26 +107,31 @@ namespace ntw.CurvedTextMeshPro
         /// <returns>要应用于文本所有顶点的变换矩阵</returns>
         protected override Matrix4x4 ComputeTransformationMatrix(Vector3 charMidBaselinePos, float zeroToOnePos, TMP_TextInfo textInfo, int charIdx)
         {
-            Debug.LogError(textInfo.characterInfo[charIdx].character + "字符的边框位置:" + zeroToOnePos + ",中心点位置:" + charMidBaselinePos);
+            if (m_arcDegrees == 0)
+            {
+                return Matrix4x4.zero;
+            }
+            
             var rectTrans = textInfo.textComponent.rectTransform;
 
-            float totalHeight = 0;
-            float curLineHeight = 0;
-            var lineIndex = textInfo.characterInfo[charIdx].lineNumber;
-            for (var i = 1; i < textInfo.lineInfo.Length; i++)
-            {
-                var lineInfo = textInfo.lineInfo[i];
-                if (lineInfo.characterCount <= 0) break;
-                totalHeight += lineInfo.lineHeight;
-                if (i <= lineIndex) curLineHeight += lineInfo.lineHeight;
-            }
+            // float totalHeight = 0;
+            // float curLineHeight = 0;
+             var lineIndex = textInfo.characterInfo[charIdx].lineNumber;
+            // for (var i = 1; i < textInfo.lineInfo.Length; i++)
+            // {
+            //     var lineInfo = textInfo.lineInfo[i];
+            //     if (lineInfo.characterCount <= 0) break;
+            //     totalHeight += lineInfo.lineHeight;
+            //     if (i <= lineIndex) curLineHeight += lineInfo.lineHeight;
+            // }
 
             float boundsMaxX = textInfo.lineInfo[lineIndex].lineExtents.max.x;
             float boundsMinX = textInfo.lineInfo[lineIndex].lineExtents.min.x;
             
             zeroToOnePos = (charMidBaselinePos.x - boundsMinX) / (boundsMaxX - boundsMinX);
             
-            float lastPrecent = (textInfo.lineInfo[lineIndex].length % rectTrans.rect.width) / rectTrans.rect.width;
+            float lastPrecent = textInfo.lineInfo[lineIndex].length / rectTrans.rect.width;//计算每行长度实际占用的百分比
+            if (lastPrecent > 1) lastPrecent = 1;
             float actualArcDegrees = lastPrecent * m_arcDegrees;
             // m_maxDegreesPerLetter = (int)(actualArcDegrees / ((float)textInfo.characterCount / textInfo.lineCount));
             //计算考虑字母之间最大距离的弧的实际度数
@@ -141,12 +147,13 @@ namespace ntw.CurvedTextMeshPro
             float x0 = Mathf.Cos(angle);
             float y0 = Mathf.Sin(angle);//(textInfo.lineInfo[0].lineExtents.max.y - textInfo.lineInfo[0].lineExtents.min.y)
             float radiusForThisLine =
-                m_radius - curLineHeight;
+                m_radius + textInfo.characterInfo[charIdx].baseLine;
             // Vector2 newMideBaselinePos = new Vector2(x0 * radiusForThisLine,
             //     -y0 * radiusForThisLine - Mathf.Abs(m_radius * Mathf.Cos(actualArcDegrees*Mathf.Deg2Rad)) + textInfo.textComponent.rectTransform.rect.height/2); //字符的实际新位置
 
-            Vector2 newMideBaselinePos = new Vector2(x0 * radiusForThisLine,
-                -y0 * radiusForThisLine - m_radius + totalHeight); //字符的实际新位置
+            Vector2 newMideBaselinePos = new Vector2(
+                x0 * radiusForThisLine - (m_radius) * Mathf.Cos(m_angularOffset * Mathf.Deg2Rad),
+                -y0 * radiusForThisLine - (m_radius) * Mathf.Abs(Mathf.Sin(m_angularOffset * Mathf.Deg2Rad))); //字符的实际新位置
             
             //计算变换矩阵：将点移动到刚找到的位置，然后旋转字符以适合曲线的角度
             //(-90是因为文本已经是垂直的，就好像它已经旋转了90度一样)
