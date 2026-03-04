@@ -33,7 +33,7 @@ public static class UIElementPickerInScene
             HashSet<RectTransform> uniqueHitRects = new HashSet<RectTransform>();
             List<RectTransform> initialClickedRects = new List<RectTransform>();
             // 更兼容编辑器：不过滤activeInHierarchy，只过滤hideFlags和scene
-            foreach (RectTransform rect in GameObject.FindObjectsOfType<RectTransform>())
+            foreach (RectTransform rect in Resources.FindObjectsOfTypeAll<RectTransform>())
             {
                 //if ((rect.hideFlags & HideFlags.NotEditable) != 0 || rect.hideFlags == HideFlags.HideAndDontSave) continue;
                 //if (rect.gameObject.scene.name == null) continue; // 只处理场景中的对象
@@ -57,7 +57,7 @@ public static class UIElementPickerInScene
                 }
             }
             // 优化点击检测：按Canvas下渲染顺序遍历所有RectTransform
-            foreach (Canvas canvas in GameObject.FindObjectsOfType<Canvas>())
+            foreach (Canvas canvas in Resources.FindObjectsOfTypeAll<Canvas>())
             {
                 if (!canvas.gameObject.activeInHierarchy) continue;
                 var rectsInCanvas = canvas.GetComponentsInChildren<RectTransform>(true);
