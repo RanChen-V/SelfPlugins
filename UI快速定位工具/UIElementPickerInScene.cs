@@ -94,7 +94,14 @@ public static class UIElementPickerInScene
                     while (current != null)
                     {
                         chain.Insert(0, current);
-                        if (canvas == null) canvas = current.GetComponentInParent<Canvas>();
+                        if (canvas == null)
+                        {
+                            canvas = current.GetComponentInParent<Canvas>();
+                            if (canvas != null)
+                            {
+                                if (!chain.Contains(canvas.GetComponent<RectTransform>())) chain.Insert(0, canvas.GetComponent<RectTransform>());
+                            }
+                        }
                         if (current.parent != null)
                             current = current.parent.GetComponent<RectTransform>();
                         else
@@ -265,27 +272,31 @@ public static class UIElementPickerInScene
             contentHeight += 18;
             yIndex++;
         }
-        // OnGUI递归渲染树
+        // OnGUI递归渲染所有根节点（递归安全）
         void OnGUI() {
-            hoveredRectInPopup = null;
-            mouseInAnyOption = false;
-            visibleRects.Clear();
-            if (rootNodes == null || rootNodes.Count == 0) return;
-            GUIStyle normalStyle = GetButtonStyle();
-            int yIndex = 0;
-            float contentHeight = 0f;
-            foreach (var root in rootNodes) DrawNodeRecursive(root, 0, ref yIndex, normalStyle, ref contentHeight);
-            if (optionRects == null || optionRects.Length != visibleRects.Count)
-                optionRects = new Rect[visibleRects.Count];
-            float windowHeight = position.height;
-            scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Width(position.width), GUILayout.Height(windowHeight));
-            EditorGUILayout.EndScrollView();
-            if (hoveredRectInPopup != null) Selection.activeGameObject = hoveredRectInPopup.gameObject;
-            if (mouseInAnyOption || Event.current.type == EventType.Repaint) Repaint();
+            try {
+                hoveredRectInPopup = null;
+                mouseInAnyOption = false;
+                visibleRects.Clear();
+                if (rootNodes == null || rootNodes.Count == 0) return;
+                GUIStyle normalStyle = GetButtonStyle();
+                int yIndex = 0;
+                float contentHeight = 0f;
+                foreach (var root in rootNodes) DrawNodeRecursive(root, 0, ref yIndex, normalStyle, ref contentHeight, 0);
+                if (optionRects == null || optionRects.Length != visibleRects.Count)
+                    optionRects = new Rect[visibleRects.Count];
+                float windowHeight = position.height;
+                scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Width(position.width), GUILayout.Height(windowHeight));
+                EditorGUILayout.EndScrollView();
+                if (hoveredRectInPopup != null) Selection.activeGameObject = hoveredRectInPopup.gameObject;
+                if (mouseInAnyOption || Event.current.type == EventType.Repaint) Repaint();
+            } catch (Exception ex) {
+                Debug.LogError("UIElementPickerPopup OnGUI error: " + ex);
+            }
         }
-        // 递归渲染Node树，支持折叠
-        void DrawNodeRecursive(Node node, int indent, ref int yIndex, GUIStyle style, ref float contentHeight) {
-            if (node == null) return;
+        // 递归渲染Node树，支持折叠（递归安全）
+        void DrawNodeRecursive(Node node, int indent, ref int yIndex, GUIStyle style, ref float contentHeight, int depth = 0) {
+            if (node == null || depth > 100) return; // 限制最大递归深度100
             int rectId = node.rect.GetInstanceID();
             bool hasChildren = node.children.Count > 0;
             bool fold = foldoutStates.ContainsKey(rectId) ? foldoutStates[rectId] : true;
@@ -300,9 +311,8 @@ public static class UIElementPickerInScene
             } else {
                 GUILayout.Space(18);
             }
-            // 统一label颜色，点击对象高亮背景
             Color origBg = GUI.backgroundColor;
-            if (node.isClicked) GUI.backgroundColor = new Color(1f, 1f, 0.6f, 1f); // 淡黄色背景
+            if (node.isClicked) GUI.backgroundColor = new Color(1f, 1f, 0.6f, 1f);
             Rect lastRect = GUILayoutUtility.GetRect(new GUIContent(node.rect.gameObject.name), style, GUILayout.ExpandWidth(true), GUILayout.Height(18));
             if (optionRects != null && yIndex < optionRects.Length)
                 optionRects[yIndex] = lastRect;
@@ -324,29 +334,27 @@ public static class UIElementPickerInScene
             contentHeight += 18;
             yIndex++;
             if (hasChildren && fold) {
-                foreach (var child in node.children) DrawNodeRecursive(child, indent + 1, ref yIndex, style, ref contentHeight);
+                foreach (var child in node.children) DrawNodeRecursive(child, indent + 1, ref yIndex, style, ref contentHeight, depth + 1);
             }
         }
 
-        // 构建Node树，支持多Canvas，剔除没有子节点的Canvas
+        // 构建Node树，根节点为链的最顶层父物体，Canvas只是其中一个节点（递归安全，链条插入Canvas节点优化）
         public static List<Node> BuildTree(List<List<RectTransform>> chains) {
             Dictionary<RectTransform, Node> nodeMap = new Dictionary<RectTransform, Node>();
-            Dictionary<Canvas, Node> canvasRoots = new Dictionary<Canvas, Node>();
+            HashSet<Node> rootCandidates = new HashSet<Node>();
             foreach (var chain in chains) {
                 Node parent = null;
-                Canvas canvas = null;
-                for (int i = 0; i < chain.Count; i++) {
+                HashSet<RectTransform> inserted = new HashSet<RectTransform>();
+                for (int i = 0; i < chain.Count && i < 100; i++) { // 限制最大递归深度100
                     var rect = chain[i];
+                    if (inserted.Contains(rect)) continue; // 防止重复插入
+                    inserted.Add(rect);
                     bool isClicked = (i == chain.Count - 1);
                     if (!nodeMap.TryGetValue(rect, out var node)) {
                         node = new Node(rect, isClicked);
                         nodeMap[rect] = node;
-                        if (parent != null) parent.children.Add(node);
-                        if (i == 0) {
-                            canvas = rect.GetComponent<Canvas>();
-                            if (canvas != null && !canvasRoots.ContainsKey(canvas))
-                                canvasRoots[canvas] = node;
-                        }
+                        if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
+                        if (i == 0) rootCandidates.Add(node);
                     } else {
                         if (isClicked) node.isClicked = true;
                         if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
@@ -354,12 +362,13 @@ public static class UIElementPickerInScene
                     parent = node;
                 }
             }
-            // 剔除没有子节点的Canvas
+            // 剔除没有子节点的Canvas（仅当Canvas是唯一节点且无children时）
             var result = new List<Node>();
-            foreach (var root in canvasRoots.Values)
+            foreach (var root in rootCandidates)
             {
-                if (root.children.Count > 0)
-                    result.Add(root);
+                var canvas = root.rect.GetComponent<Canvas>();
+                if (canvas != null && root.children.Count == 0) continue;
+                result.Add(root);
             }
             return result;
         }
@@ -371,6 +380,7 @@ public static class UIElementPickerInScene
             {
                 Selection.activeGameObject = hoveredRectInPopup.gameObject;
             }
+            // 恢复失焦自动关闭弹窗
             if (EditorWindow.focusedWindow != this)
             {
                 Close();
