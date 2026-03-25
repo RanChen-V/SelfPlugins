@@ -239,17 +239,13 @@ public static class UIElementPickerInScene
         static void InitFoldout(Node node, Dictionary<int, bool> foldoutStates) {
             if (node == null) return;
             foldoutStates[node.rect.GetInstanceID()] = true;
-            foreach (var child in node.children)
-            {
-                if (child.rect.name == node.rect.name) continue;
-                InitFoldout(child, foldoutStates);
-            }
+            foreach (var child in node.children) InitFoldout(child, foldoutStates);
         }
         // 统计显示行数
         static int CountRows(Node node, Dictionary<int, bool> foldoutStates, int indent) {
             if (node == null) return 0;
             int count = 1;
-            bool fold = foldoutStates.ContainsKey(node.rect.GetInstanceID()) ? foldoutStates[node.rect.GetInstanceID()] : true;
+            bool fold = !foldoutStates.ContainsKey(node.rect.GetInstanceID()) || foldoutStates[node.rect.GetInstanceID()];
             if (node.children.Count > 0 && fold) {
                 foreach (var child in node.children) count += CountRows(child, foldoutStates, indent + 1);
             }
@@ -367,7 +363,6 @@ public static class UIElementPickerInScene
         public static List<Node> BuildTree(List<List<RectTransform>> chains) {
             Dictionary<RectTransform, Node> nodeMap = new Dictionary<RectTransform, Node>();
             HashSet<Node> rootCandidates = new HashSet<Node>();
-            Dictionary<Node,bool> hasNodeInserted = new Dictionary<Node, bool>();
             foreach (var chain in chains) {
                 Node parent = null;
                 HashSet<RectTransform> inserted = new HashSet<RectTransform>();
@@ -379,17 +374,11 @@ public static class UIElementPickerInScene
                     if (!nodeMap.TryGetValue(rect, out var node)) {
                         node = new Node(rect, isClicked);
                         nodeMap[rect] = node;
-                        if (parent != null && !parent.children.Contains(node))
-                        {
-                            parent.children.Add(node);
-                        }
+                        if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
                         if (i == 0) rootCandidates.Add(node);
                     } else {
                         if (isClicked) node.isClicked = true;
-                        if (parent != null && !parent.children.Contains(node) && !hasNodeInserted.TryGetValue(node, out var insertedFlag))
-                        {
-                            parent.children.Add(node);
-                        }
+                        if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
                     }
                     parent = node;
                 }
