@@ -96,14 +96,18 @@ public static class UIElementPickerInScene
                         chain.Insert(0, current);
                         if (canvas == null)
                         {
-                            canvas = current.GetComponentInParent<Canvas>();
+                            canvas = GetRootCanvas(current);
                             if (canvas != null)
                             {
                                 if (!chain.Contains(canvas.GetComponent<RectTransform>())) chain.Insert(0, canvas.GetComponent<RectTransform>());
                             }
                         }
+
                         if (current.parent != null)
-                            current = current.parent.GetComponent<RectTransform>();
+                        {
+                            var parentNode = current.parent.GetComponent<RectTransform>();
+                            current = !parentNode ? current.parent.GetComponentInParent<RectTransform>() : parentNode;
+                        }
                         else
                             current = null;
                     }
@@ -143,6 +147,23 @@ public static class UIElementPickerInScene
         }
     }
 
+    private static Canvas GetRootCanvas(Transform rect)
+    {
+        Canvas canvas = null;
+        if (rect == null || rect.parent == null) return null;
+        var node = rect.parent;
+        while (node != null)
+        {
+            var parentCanvas = node.GetComponentInParent<Canvas>();
+            if (parentCanvas != null)
+            {
+                canvas = parentCanvas;
+            }
+            node = node.parent;
+        }
+        return canvas;
+    }
+    
     // 辅助函数：获取相对于根Canvas或顶层对象的层级深度
     public static int GetHierarchyDepth(Transform t)
     {
@@ -218,7 +239,11 @@ public static class UIElementPickerInScene
         static void InitFoldout(Node node, Dictionary<int, bool> foldoutStates) {
             if (node == null) return;
             foldoutStates[node.rect.GetInstanceID()] = true;
-            foreach (var child in node.children) InitFoldout(child, foldoutStates);
+            foreach (var child in node.children)
+            {
+                if (child.rect.name == node.rect.name) continue;
+                InitFoldout(child, foldoutStates);
+            }
         }
         // 统计显示行数
         static int CountRows(Node node, Dictionary<int, bool> foldoutStates, int indent) {
@@ -342,6 +367,7 @@ public static class UIElementPickerInScene
         public static List<Node> BuildTree(List<List<RectTransform>> chains) {
             Dictionary<RectTransform, Node> nodeMap = new Dictionary<RectTransform, Node>();
             HashSet<Node> rootCandidates = new HashSet<Node>();
+            Dictionary<Node,bool> hasNodeInserted = new Dictionary<Node, bool>();
             foreach (var chain in chains) {
                 Node parent = null;
                 HashSet<RectTransform> inserted = new HashSet<RectTransform>();
@@ -353,11 +379,17 @@ public static class UIElementPickerInScene
                     if (!nodeMap.TryGetValue(rect, out var node)) {
                         node = new Node(rect, isClicked);
                         nodeMap[rect] = node;
-                        if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
+                        if (parent != null && !parent.children.Contains(node))
+                        {
+                            parent.children.Add(node);
+                        }
                         if (i == 0) rootCandidates.Add(node);
                     } else {
                         if (isClicked) node.isClicked = true;
-                        if (parent != null && !parent.children.Contains(node)) parent.children.Add(node);
+                        if (parent != null && !parent.children.Contains(node) && !hasNodeInserted.TryGetValue(node, out var insertedFlag))
+                        {
+                            parent.children.Add(node);
+                        }
                     }
                     parent = node;
                 }
